@@ -1,0 +1,2 @@
+logs: /var/lib/docker/containers/<container-id>/
+prometheus_client_port: 8500
