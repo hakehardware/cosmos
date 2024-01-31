@@ -5,3 +5,4 @@ if __name__ == "__main__":
     logger.info('starting')
     config = Helpers.read_yaml_file('example.config.yml')
     logger.info(config)
+    logger.info('test')
