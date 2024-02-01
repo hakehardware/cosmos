@@ -1,2 +1,4 @@
-logs: /var/lib/docker/containers/<container-id>/
+farmer_log_path: /var/lib/docker/containers/5ae373ce2c062e2e3a2463e37ecee11c2fbd54ad869271d213644610b2bb110c/5ae373ce2c062e2e3a2463e37ecee11c2fbd54ad869271d213644610b2bb110c-json.log
+node_log_path: /var/lib/docker/containers/62c0d68ea9ee33e78afd32f18a8f153b1e156fd6d40f5e1501d2b3e3fc336f7f/62c0d68ea9ee33e78afd32f18a8f153b1e156fd6d40f5e1501d2b3e3fc336f7f-json.log
+tail: 100
 prometheus_client_port: 8500
