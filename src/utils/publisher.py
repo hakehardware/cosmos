@@ -7,16 +7,11 @@ class Publisher:
         self.plotting_progress = Gauge('plotting_progress', 'Plotting Progress', labelnames=['sector_index','disk_farm_index'])
         self.piece_cache = Gauge('piece_cache', 'Piece Cache Progress')
 
-    def publish_sector_data(self, data):
-        logger.info('Publishing Sector Data')
+    def publish_farmer(self, data):
+        logger.info(f'Publishing Farmer Data: {data}')
+        self.piece_cache.set(data['piece_cache_status'])
 
-        sector_index, disk_farm_index, progress = data['sector_index'], data['disk_farm_index'], data['percentage_complete']
-        self.sector_plotted.labels(disk_farm_index=disk_farm_index).set(sector_index)
-        self.plotting_progress.labels(sector_index=sector_index, disk_farm_index=disk_farm_index).set(progress)
-
-    def publish_piece_cache_data(self, data):
-        logger.info('Publishing Piece Cache Data')
-        self.piece_cache.set(data['percentage_complete'])
-
-
-        
+        for farm in data['plotting_status']:
+            disk_farm_index, percentage_complete, sector_index = farm['disk_farm_index'], farm['percentage_complete'], farm['sector_index']
+            self.sector_plotted.labels(disk_farm_index=disk_farm_index).set(sector_index)
+            self.plotting_progress.labels(sector_index=sector_index, disk_farm_index=disk_farm_index).set(percentage_complete)

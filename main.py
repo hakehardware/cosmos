@@ -1,105 +1,145 @@
 from src.utils.logger import logger
 from src.utils.helpers import Helpers
+import src.utils.constants as constants
+from src.utils.parser import Parser
 import json
 import re
 import time
 import argparse
 import sys
 import datetime
-
+import threading
+import requests
 from src.utils.publisher import Publisher
 from prometheus_client import start_http_server
-# from collections import deque
-# import dateutil.parser
-# import numpy as np
+from prometheus_client.parser import text_string_to_metric_families
 
-# def handle_line(line):
-#     data = json.loads(line)
-#     log_message = data.get("log", "")
-#     log_time = data.get("time", "")
+class Cosmos:
+    def __init__(self, config) -> None:
+        self.config = config
+        self.node_state = {}
+        self.farm_state = {
+            'peers': 0,
+            'piece_cache_status': 0,
+            'plotting_status': [],
+            'replotting_status': []
+            # 'plotting_speed_mib': [],
+            # 'current_sector': 0,
+            # 'plotting_sectors_per_min': 0
+        }
+        self.publisher = Publisher()
 
-#     # Regular expression patterns for different log types
-#     pattern1 = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*\[\w+\] 💤 Idle \((\d+) peers\), best: #(\d+)')
-#     pattern2 = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*\[\w+\] ✨ Imported #(\d+)')
-#     pattern3 = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*\[\w+\] 🎁 Prepared block for proposing at (\d+) \((\d+) ms\)')
-
-#     match1 = pattern1.search(log_message)
-#     match2 = pattern2.search(log_message)
-#     match3 = pattern3.search(log_message)
-
-#     result = {"time": log_time}
-
-#     # Check which pattern matches and extract data
-#     if match1:
-#         result["peers"] = int(match1.group(1))
-#         result["best"] = int(match1.group(2))
-#     elif match2:
-#         result["imported"] = int(match2.group(1))
-#     elif match3:
-#         result["block"] = int(match3.group(1))
-#         result["latency"] = match3.group(2) + " ms"
-
-#     return result
-
-# def tail_file(log_path, lines):
-#     with open(log_path, 'r') as file:
-#         return deque(file, maxlen=lines)
-    
-# def get_average_sector_time():
-
-
-#     # Sample log entries
-#     log_entries = [
-#         # ... (your log entries here)
-#     ]
-
-#     # Function to extract time from a log entry
-#     def extract_time(entry):
-#         data = json.loads(entry)
-#         return dateutil.parser.isoparse(data['time'])
-
-#     # Extract times from log entries
-#     times = [extract_time(entry) for entry in log_entries]
-
-#     # Calculate time differences between consecutive entries (in seconds)
-#     time_diffs = [(times[i] - times[i-1]).total_seconds() for i in range(1, len(times))]
-
-#     # Calculate the average time difference
-#     average_time_diff = np.mean(time_diffs)
-
-#     print(f"Average time between plots: {average_time_diff} seconds")
-
-
-# def follow_log(file_name):
-#     with open(file_name, 'r') as file:
-#         # Move the pointer to the end of the file
-#         file.seek(0,2)
-        
-#         while True:
-#             line = file.readline()
-#             if not line:
-#                 time.sleep(0.1)  # Sleep briefly to avoid busy waiting
-#                 continue
+    def _load_old_logs(self, log_file_path):
+        logs = []
+        with open(log_file_path, 'r') as file:
+            lines = file.readlines()
+            # Start reading from the end of the file
             
-#             # else:
-#             #     logger.info(handle_line(line))
-#             yield line
-# 2024-01-31T14:33:50.798806Z [Consensus] 🗳️ Claimed vote at slot slot=7935042
-# 2024-01-31T14:26:18.826774Z [Consensus] ✨ Imported #1342113 (0x0703…e6c8)    
-# 2024-01-31T14:26:12.702283Z [Consensus] 💤 Idle (6 peers), best: #1342110 (0x965f…530e), finalized #1180565 (0xa5a2…e408), ⬇ 23.3kiB/s ⬆ 13.1kiB/s    
+            for line in lines:
+                try:
+                    log_entry = json.loads(line)
+                    logs.append(log_entry)
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding JSON: {e}")
+
+        return logs
+
+    def _parse_old_logs(self):
+        logger.info('Loading Node Logs')
+        # node_logs = self._load_old_logs(self.config['node_log_path'])
+
+        logger.info('Loading Farmer Logs')
+        farmer_logs = self._load_old_logs(self.config['farmer_log_path'])
+
+        logger.info('Analyzing Logs')
+        for log in farmer_logs:
+            event = Parser.analyze_log(log)
+            self._evaluate_event(event)
+
+    def _evaluate_event(self, event):
+        if event['event_type'] == 'Plotting Sector':
+            if len(self.farm_state['plotting_status']) > int(event['data']['disk_farm_index']):
+                self.farm_state['plotting_status'][int(event['data']['disk_farm_index'])] = event['data']
+            else:
+                self.farm_state['plotting_status'].append(event['data'])
+            
+            print(self.farm_state)
+
+        elif event['event_type'] == 'Syncing Piece Cache':
+            self.farm_state['piece_cache_status'] = event['data']['percentage_complete']
+
+            print(self.farm_state)
+
+        elif event['event_type'] == 'Finished Piece Cache Sync':
+            self.farm_state['piece_cache_status'] = 100.00
+            print(self.farm_state)
+
+    def _fetch_metrics(self, url):
+        try:
+            response = requests.get(url)
+            response.raise_for_status()  # Raises an exception for 4XX/5XX errors
+            return response.text
+        except requests.RequestException as e:
+            print(f"Error fetching metrics from {url}: {e}")
+            return None
+        
+    def _parse_metrics(self, metrics_data):
+        metrics = []
+        for family in text_string_to_metric_families(metrics_data):
+            for sample in family.samples:
+                if 'subspace' in sample.name:
+                    metrics.append(sample)
+
+    def _publish(self):
+        self.publisher.publish_farmer(self.farm_state)
+
+    def _monitor_logs(self, log_file_path):
+        logger.info(f'Watching logs at {log_file_path}')
+        self._publish()
+
+        with open(log_file_path, 'r') as file:
+            # Move the pointer to the end of the file
+            file.seek(0,2)
+
+            while True:
+                line = file.readline()
+                if not line:
+                    time.sleep(0.1)
+                    continue
+                else:
+                    event = Parser.analyze_log(json.loads(line))
+                    self._evaluate_event(event)
+                    self._publish()
+
+    def run(self):
+        logger.info('Initializing Cosmos')
+        logger.info('Loading existing logs...')
+        start_http_server(config["prometheus_client_port"])
+
+        self._parse_old_logs()
+
+        self._monitor_logs(self.config['farmer_log_path'])
+
+        # thread1 = threading.Thread(target=monitor_log_file, args=(log_file1,))
+
+        # metrics = self.fetch_metrics('http://172.19.0.202:9615/metrics')
+        # metrics_parsed = self.parse_metrics(metrics)
+        # print(metrics_parsed)
 
 
 
-# if __name__ == "__main__":
-#     logger.info('starting')
-#     config = Helpers.read_yaml_file('example.config.yml')
-#     logger.info(config)
-#     logger.info('test')
-#     tail = tail_file(config['farmer_logs'], 100)
-#     print(tail)
 
-    # for line in follow_log(config['farmer_logs']):
-    #     print(line, end='')
+
+
+
+
+
+
+
+
+
+
+
 
 KEY_EVENTS = [
     'Plotting sector',
@@ -194,9 +234,8 @@ def tail_logs(log_file_path, tail):
     with open(log_file_path, 'r') as file:
         lines = file.readlines()
         # Start reading from the end of the file
-        start_index = max(0, len(lines) - tail)
         
-        for line in lines[start_index:]:
+        for line in lines:
             try:
                 log_entry = json.loads(line)
                 logs.append(log_entry)
@@ -217,6 +256,7 @@ def watch_logs(log_file_path):
     logger.info(f'Watching logs at {log_file_path}')
 
     publisher = Publisher()
+
 
     with open(log_file_path, 'r') as file:
         # Move the pointer to the end of the file
@@ -251,6 +291,7 @@ def watch_logs(log_file_path):
             #     print(e)
 
 def run(config):
+    logger.info(f'Starting Prometheus Client')
     start_http_server(config["prometheus_client_port"])
 
     logger.info('Starting Parser')
@@ -279,7 +320,8 @@ if __name__ == "__main__":
 
     logger.info(f'Loaded Config: {config}')
 
-    run(config)
+    cosmos = Cosmos(config)
+    cosmos.run()
 
 
 
