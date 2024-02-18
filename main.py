@@ -11,72 +11,16 @@ import datetime
 import threading
 import requests
 from src.utils.publisher import Publisher
-from prometheus_client import start_http_server
 from prometheus_client.parser import text_string_to_metric_families
 
 class Cosmos:
     def __init__(self, config) -> None:
         self.config = config
-        self.node_state = {}
-        self.farm_state = {
-            'peers': 0,
-            'piece_cache_status': 0,
-            'plotting_status': [],
-            'replotting_status': []
-            # 'plotting_speed_mib': [],
-            # 'current_sector': 0,
-            # 'plotting_sectors_per_min': 0
-        }
-        self.publisher = Publisher()
-
-    def _load_old_logs(self, log_file_path):
-        logs = []
-        with open(log_file_path, 'r') as file:
-            lines = file.readlines()
-            # Start reading from the end of the file
-            
-            for line in lines:
-                try:
-                    log_entry = json.loads(line)
-                    logs.append(log_entry)
-                except json.JSONDecodeError as e:
-                    print(f"Error decoding JSON: {e}")
-
-        return logs
-
-    def _parse_old_logs(self):
-        logger.info('Loading Node Logs')
-        # node_logs = self._load_old_logs(self.config['node_log_path'])
-
-        logger.info('Loading Farmer Logs')
-        farmer_logs = self._load_old_logs(self.config['farmer_log_path'])
-
-        logger.info('Analyzing Logs')
-        for log in farmer_logs:
-            event = Parser.analyze_log(log)
-            self._evaluate_event(event)
-
-    def _evaluate_event(self, event):
-        if event['event_type'] == 'Plotting Sector':
-            if len(self.farm_state['plotting_status']) > int(event['data']['disk_farm_index']):
-                self.farm_state['plotting_status'][int(event['data']['disk_farm_index'])] = event['data']
-            else:
-                self.farm_state['plotting_status'].append(event['data'])
-            
-            print(self.farm_state)
-
-        elif event['event_type'] == 'Syncing Piece Cache':
-            self.farm_state['piece_cache_status'] = event['data']['percentage_complete']
-
-            print(self.farm_state)
-
-        elif event['event_type'] == 'Finished Piece Cache Sync':
-            self.farm_state['piece_cache_status'] = 100.00
-            print(self.farm_state)
 
     def _fetch_metrics(self, url):
         try:
-            response = requests.get(url)
+            print(f'{url}/metrics')
+            response = requests.get(f'{url}/metrics')
             response.raise_for_status()  # Raises an exception for 4XX/5XX errors
             return response.text
         except requests.RequestException as e:
@@ -89,42 +33,16 @@ class Cosmos:
             for sample in family.samples:
                 if 'subspace' in sample.name:
                     metrics.append(sample)
-
-    def _publish(self):
-        self.publisher.publish_farmer(self.farm_state)
-
-    def _monitor_logs(self, log_file_path):
-        logger.info(f'Watching logs at {log_file_path}')
-        self._publish()
-
-        with open(log_file_path, 'r') as file:
-            # Move the pointer to the end of the file
-            file.seek(0,2)
-
-            while True:
-                line = file.readline()
-                if not line:
-                    time.sleep(0.1)
-                    continue
-                else:
-                    event = Parser.analyze_log(json.loads(line))
-                    self._evaluate_event(event)
-                    self._publish()
+        return metrics
 
     def run(self):
         logger.info('Initializing Cosmos')
         logger.info('Loading existing logs...')
-        start_http_server(config["prometheus_client_port"])
 
-        self._parse_old_logs()
-
-        self._monitor_logs(self.config['farmer_log_path'])
-
-        # thread1 = threading.Thread(target=monitor_log_file, args=(log_file1,))
-
-        # metrics = self.fetch_metrics('http://172.19.0.202:9615/metrics')
-        # metrics_parsed = self.parse_metrics(metrics)
-        # print(metrics_parsed)
+        for farm in config['farmer_endpoints']:
+            response = self._fetch_metrics(farm['endpoint'])
+            metrics = self._parse_metrics(response)
+            print(metrics)
 
 
 
@@ -313,6 +231,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     config = Helpers.read_yaml_file(args.config)
+    
+    for farmer in config['farmers']:
+        container_id = Helpers.get_full_container_id(farmer['container_name'])
+        logger.info(f'Container ID: {container_id}')
+    
+    
 
     if not config:
         logger.error(f'Error loading config from {args.config}. Are you sure you put in the right location?')
@@ -320,8 +244,8 @@ if __name__ == "__main__":
 
     logger.info(f'Loaded Config: {config}')
 
-    cosmos = Cosmos(config)
-    cosmos.run()
+    # cosmos = Cosmos(config)
+    # cosmos.run()
 
 
 

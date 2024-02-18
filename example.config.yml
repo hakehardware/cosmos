@@ -1,4 +1,4 @@
-farmer_log_path: /var/lib/docker/containers/cf6eca58885990c28056f6cfbcb7926793c5290abadf389c780adc972d90b0f0/cf6eca58885990c28056f6cfbcb7926793c5290abadf389c780adc972d90b0f0-json.log
-node_log_path: /var/lib/docker/containers/fbde9b00e7e4efc9ca022077365dc99b7c3064bb637b090378efb21b95ddd112/fbde9b00e7e4efc9ca022077365dc99b7c3064bb637b090378efb21b95ddd112-json.log
-prometheus_client_port: 8500
-farmer_prometheus_endpoint: http://172.19.0.202:9615/metrics
+farmers:
+  - name: bravo
+    prometheus_endpoint: http://172.18.0.202:9900
+    container_name: subspace_farmer
