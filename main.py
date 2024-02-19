@@ -17,6 +17,17 @@ class Cosmos:
     def __init__(self, config) -> None:
         self.config = config
 
+        self.node_container_id = None
+        self.node_log_location = None
+        self.farmer_container_id = None
+        self.farmer_log_location = None
+
+        self.farmer_state = {
+            'farms': [],
+            'farm_status': None
+        }
+        self.node_state = None
+
     def _fetch_metrics(self, url):
         try:
             print(f'{url}/metrics')
@@ -35,14 +46,100 @@ class Cosmos:
                     metrics.append(sample)
         return metrics
 
+    def _set_container_info(self):
+
+        # Set Node Container ID & Log Location
+        if config['node_container_name']:
+            self.node_container_id = Helpers.get_full_container_id(config['node_container_name'])
+            self.node_log_location = f'/var/lib/docker/containers/{self.node_container_id}/{self.node_container_id}-json.log'
+            logger.info(f'Node Container ID: {self.node_container_id}')
+            logger.info(f'Node Log Location: {self.node_log_location}')
+
+        if config['farmer_container_name']:
+            self.farmer_container_id = Helpers.get_full_container_id(config['farmer_container_name'])
+            self.farmer_log_location = f'/var/lib/docker/containers/{self.farmer_container_id}/{self.farmer_container_id}-json.log'
+            logger.info(f'Farmer Container ID: {self.farmer_container_id}')
+            logger.info(f'Farmer Log Location: {self.farmer_log_location}')
+
+    def _get_logs(self, log_file_path):
+        logs = []
+        with open(log_file_path, 'r') as file:
+            lines = file.readlines()
+            # Start reading from the end of the file
+            
+            for line in lines:
+                try:
+                    log_entry = json.loads(line)
+                    logs.append(log_entry)
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding JSON: {e}")
+
+        return logs
+    
+    def _parse_existing_logs(self):
+        if self.node_log_location:
+            node_logs = self._get_logs(self.node_log_location)
+            logger.info(f'Node Log Count: {len(node_logs)}')
+
+        if self.farmer_log_location:
+            farmer_logs = self._get_logs(self.farmer_log_location)
+            logger.info(f'Farmer Log Count: {len(farmer_logs)}')
+            for index, log in enumerate(farmer_logs):
+                analyzed_log = Parser.analyze_log(log)
+
+                # if analyzed_log['event_type'] == 'Unknown':
+                #     print(analyzed_log)
+                
+                if analyzed_log['event_type'] == 'New Farm Identified':
+                    farm_index = analyzed_log['data']['farm_index']
+                    id = Parser.get_farm_id(farmer_logs[index+1])
+                    allocated_space = Parser.get_allocated_space(farmer_logs[index+4])
+                    self.farmer_state['farms'].append({
+                        'allocated_space': allocated_space, 
+                        'id': id,
+                        'percentage_complete': 0,
+                        'current_sector': 0
+                    })
+                    logger.info(f'Added new disk to farm state: {self.farmer_state["farms"][farm_index]}')
+
+                if analyzed_log['event_type'] == 'Synchronizing Piece Cache':
+                    self.farmer_state['farm_status'] = analyzed_log['event_type']
+                    logger.info(f'New Farm State: {self.farmer_state["farm_status"]}')
+
+                if analyzed_log['event_type'] == 'Plotting Sector' and self.farmer_state['farm_status'] != 'Plotting Sector':
+                    self.farmer_state['farm_status'] = analyzed_log['event_type']
+                    logger.info(f'New Farm State: {self.farmer_state["farm_status"]}')
+
+                if analyzed_log['event_type'] == 'Plotting Paused' and self.farmer_state['farm_status'] != 'Plotting Paused':
+                    self.farmer_state['farm_status'] = analyzed_log['event_type']
+                    logger.info(f'New Farm State: {self.farmer_state["farm_status"]}')
+
+                if analyzed_log['event_type'] == 'Plotting Sector':
+                    farm_index = analyzed_log['data']['farm_index']
+                    percentage_complete = analyzed_log['data']['percentage_complete']
+                    current_sector = analyzed_log['data']['current_sector']
+                    self.farmer_state['farms'][farm_index]['percentage_complete'] = percentage_complete
+                    self.farmer_state['farms'][farm_index]['current_sector'] = current_sector
+
+        logger.info(f'Loaded Farmer State: {json.dumps(self.farmer_state, indent=4)}')
+
     def run(self):
         logger.info('Initializing Cosmos')
-        logger.info('Loading existing logs...')
 
-        for farm in config['farmer_endpoints']:
-            response = self._fetch_metrics(farm['endpoint'])
-            metrics = self._parse_metrics(response)
-            print(metrics)
+        # Set IDs and Log Locations
+        self._set_container_info()
+
+        # Backfill Logs
+        self._parse_existing_logs()
+
+        # Monitor Logs
+
+        # Monitor Metrics
+
+        # for farm in config['farmer_endpoints']:
+        #     response = self._fetch_metrics(farm['endpoint'])
+        #     metrics = self._parse_metrics(response)
+        #     print(metrics)
 
 
 
@@ -224,28 +321,30 @@ def run(config):
     logger.info('Tailed logs complete, watching log file')
     watch_logs(farmer_log_path)
 
-if __name__ == "__main__":
 
+
+
+if __name__ == "__main__":
+    # Must be run as root in order to access docker logs
+    if not Helpers.check_root():
+        logger.error('You must run as root')
+        sys.exit(1)
+
+    # Get args in order to load the config
     parser = argparse.ArgumentParser(description="Process command line arguments.")
     parser.add_argument("-c", "--config", help="Path to a config file", type=str, required=True)
     args = parser.parse_args()
 
+    # Load the config
     config = Helpers.read_yaml_file(args.config)
+    logger.info(f'Loaded Config: {config}')
     
-    for farmer in config['farmers']:
-        container_id = Helpers.get_full_container_id(farmer['container_name'])
-        logger.info(f'Container ID: {container_id}')
-    
-    
-
     if not config:
         logger.error(f'Error loading config from {args.config}. Are you sure you put in the right location?')
         sys.exit(1)
 
-    logger.info(f'Loaded Config: {config}')
-
-    # cosmos = Cosmos(config)
-    # cosmos.run()
+    cosmos = Cosmos(config)
+    cosmos.run()
 
 
 

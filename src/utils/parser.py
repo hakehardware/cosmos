@@ -16,9 +16,9 @@ class Parser:
                     'event_type': 'Plotting Sector',
                     'time': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
                     'data': {
-                        'disk_farm_index': match.group(1),
+                        'farm_index': int(match.group(1)),
                         'percentage_complete': match.group(2),
-                        'sector_index': match.group(3)
+                        'current_sector': match.group(3)
                     }
                 }
         elif constants.KEY_EVENTS[1] in log['log']:
@@ -30,7 +30,7 @@ class Parser:
 
             if match:
                 event = {
-                    'event_type': 'Syncing Piece Cache',
+                    'event_type': 'Piece Cache Sync',
                     'time': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
                     'data': {
                         'percentage_complete': float(match.group(1)),
@@ -51,10 +51,62 @@ class Parser:
                 'event_type': 'Finished Piece Cache Sync',
                 'time': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
             }
+        elif constants.KEY_EVENTS[5] in log['log']:
+            # Define a regex pattern to match the percentage complete
+            pattern = r"disk_farm_index=(\d+)"
+
+            # Use re.search() to find the match
+            match = re.search(pattern, log['log'])
+
+            if match:
+                event = {
+                    'event_type': 'Successfully Signed Reward Hash',
+                    'time': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                    'data': {
+                        'farm_index': match.group(1)
+                    }
+                }
+        elif constants.KEY_EVENTS[6] in log['log']:
+            pattern = r"Single disk farm (\d+):"
+
+            # Use re.search() to find the match
+            match = re.search(pattern, log['log'])
+
+            event = {
+                'event_type': 'New Farm Identified',
+                'time': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                'data': {
+                    'farm_index': int(match.group(1))
+                }
+            }
+        elif constants.KEY_EVENTS[7] in log['log']:
+            event = {
+                    'event_type': 'Synchronizing Piece Cache',
+                    'time': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+            }
         else:
             event = {
                 'event_type': 'Unknown',
-                'time': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S")
+                'time': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                'data': {
+                    'log': log['log']
+                }
             }
-            #logger.info(event)
-        return event   
+
+            
+        return event
+    
+    def get_farm_id(log):
+        pattern = r"ID:\s+(\S+)"
+
+        # Use re.search() to find the match
+        match = re.search(pattern, log['log'])
+
+        return match.group(1)
+    
+    def get_allocated_space(log):
+        pattern = r"Allocated space: ([\d\.]+) (TiB|GiB|TB|GB)"
+        # Use re.search() to find the match
+        match = re.search(pattern, log['log'])
+
+        return match.group(1) + " " + match.group(2)

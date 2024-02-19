@@ -38,3 +38,10 @@ class Helpers:
                 return "Container not found."
         except subprocess.CalledProcessError as e:
             return f"Error executing Docker command: {e}"
+        
+    @staticmethod
+    def check_root():
+        if os.geteuid() == 0:
+            return True
+
+        return False

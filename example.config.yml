@@ -1,4 +1,4 @@
-farmers:
-  - name: bravo
-    prometheus_endpoint: http://172.18.0.202:9900
-    container_name: subspace_farmer
+farmer_container_name: subspace_farmer
+farmer_metrics: http://172.18.0.202:9900
+node_container_name: subspace_node
+node_metrics: http://172.18.0.201:9901
