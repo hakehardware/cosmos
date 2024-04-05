@@ -1,4 +1,2 @@
-farmer_container_name: subspace_farmer
-farmer_metrics: http://172.18.0.202:9900
-node_container_name: subspace_node
-node_metrics: http://172.18.0.201:9901
+farmer_container_name: subspace-farm-stack
+farmer_metrics: http://172.18.0.100:9080

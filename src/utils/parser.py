@@ -9,7 +9,7 @@ class Parser:
         log_time = log['time'].split('.')[0]
 
         if constants.KEY_EVENTS[0] in log['log']:
-            pattern = r'disk_farm_index=(\d+).*?(\d+\.\d+)% complete.*?sector_index=(\d+)'        
+            pattern = r'farm_index=(\d+).*?(\d+\.\d+)% complete.*?sector_index=(\d+)'        
             match = re.search(pattern, log['log'])
             if match:
                 event = {
