@@ -1,8 +1,12 @@
 from src.utils.logger import logger
 from src.utils.helpers import Helpers
 from src.utils.parser import Parser
+from src.apis import DiscordAPI
 
+from prometheus_client.parser import text_string_to_metric_families
 import src.utils.constants as constants
+import requests
+import json
 
 class Cosmos:
     def __init__(self, config) -> None:
@@ -30,7 +34,7 @@ class Cosmos:
             logger.info(f'Node Log Count: {len(node_logs)}')
             
             for log in node_logs:
-                event = Parser.analyze_log(log)
+                event = Parser.get_log_event(log)
                 logger.info(event)
         
         # Backfill Farmer Logs
@@ -40,10 +44,7 @@ class Cosmos:
             logger.info(f'Farmer Log Count: {len(farmer_logs)}')
 
             for log in farmer_logs:
-                event = Parser.analyze_log(log)
-
-                #if event:
-                    #logger.info(event)
+                event = Parser.get_log_event(log)
 
     def _set_container_info(self) -> None:
         # Get the Node information if applicable
@@ -88,7 +89,7 @@ class Cosmos:
     def _check_version(self) -> None:
         # Each version of Cosmos is built for a specific image version - warn users if they are not using the same
         logger.info('Checking version compatibility')
-        
+
         if self.containers["Node Version"]:
             if self.containers["Node Version"] != constants.VERSIONS["Node Version"]:
                 logger.warn(f'You are running {self.containers["Node Version"]}. For the best experience use {constants.VERSIONS["Node Version"]}')
@@ -96,6 +97,29 @@ class Cosmos:
         if self.containers["Farmer Version"]:
             if self.containers["Farmer Version"] != constants.VERSIONS["Farmer Version"]:
                 logger.warn(f'You are running {self.containers["Farmer Version"]}. For the best experience use {constants.VERSIONS["Farmer Version"]}')
+
+    def _monitor_metrics(self) -> None:
+        try:
+            response = requests.get(f'{self.config["farmer_metrics"]}')
+            response.raise_for_status()  # Raises an exception for 4XX/5XX errors
+
+            metrics = []
+            for family in text_string_to_metric_families(response.text):
+                for sample in family.samples:
+                    if 'subspace' in sample.name:
+                        metrics.append(sample)
+            
+            for metric in metrics:
+                logger.info(metric)
+
+        except requests.RequestException as e:
+            logger.error(f'Error fetching metrics from {self.config["farmer_metrics"]}: {e}')
+            return None
+        
+    def send_discord_message(self, message_type, message) -> None:
+        if message_type == 'Reward':
+            DiscordAPI.send_discord_message(self.config["reward_webhook"], message)
+
 
     def run(self) -> None:
         logger.info(f'Initializing Cosmos {constants.VERSIONS["Cosmos"]}')
@@ -107,8 +131,10 @@ class Cosmos:
         self._check_version()
 
         # Backfill Logs
-        self._backfill_logs()
+        #self._backfill_logs()
 
+        # Pull in Prometheus Metrics
+        self._monitor_metrics()
 
 
 

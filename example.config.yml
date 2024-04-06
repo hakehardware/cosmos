@@ -1,2 +1,4 @@
+farmer_name: Whiskey
 farmer_container_name: subspace-farm-stack
-farmer_metrics: http://172.18.0.100:9080
+farmer_metrics: http://172.18.0.100:9080/metrics
+reward_webhook: https://discordapp.com/api/webhooks/1226177041930387486/gTH80kvSAGLRpN1TuPEwLtaMWUcn6h8td8mZ9puvvGMtTpBNM70ncsjzIGUTOFuxrqPD
