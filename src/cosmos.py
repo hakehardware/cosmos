@@ -6,8 +6,12 @@ from src.apis import DiscordAPI
 from prometheus_client.parser import text_string_to_metric_families
 import src.utils.constants as constants
 import requests
+import os
 import json
 
+from dotenv import load_dotenv
+
+load_dotenv()
 class Cosmos:
     def __init__(self, config) -> None:
         self.config = config
@@ -25,6 +29,8 @@ class Cosmos:
             'Farms': [],
             'Farm Status': None
         }
+
+        self.reward_webhook = os.getenv('REWARD_WEBHOOK')
 
     def _backfill_logs(self) -> None:
         # Backfill Node Logs
@@ -109,8 +115,9 @@ class Cosmos:
                     if 'subspace' in sample.name:
                         metrics.append(sample)
             
-            for metric in metrics:
-                logger.info(metric)
+
+            parsed_metrics = Parser.parse_prometheus_metrics(metrics)
+            logger.info(json.dumps(parsed_metrics, indent=4))
 
         except requests.RequestException as e:
             logger.error(f'Error fetching metrics from {self.config["farmer_metrics"]}: {e}')
@@ -118,7 +125,7 @@ class Cosmos:
         
     def send_discord_message(self, message_type, message) -> None:
         if message_type == 'Reward':
-            DiscordAPI.send_discord_message(self.config["reward_webhook"], message)
+            DiscordAPI.send_discord_message(self.reward_webhook, message)
 
 
     def run(self) -> None:
@@ -131,10 +138,7 @@ class Cosmos:
         self._check_version()
 
         # Backfill Logs
-        #self._backfill_logs()
+        # self._backfill_logs()
 
         # Pull in Prometheus Metrics
         self._monitor_metrics()
-
-
-
