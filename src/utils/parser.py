@@ -3,11 +3,13 @@ import src.utils.constants as constants
 import re
 import datetime
 from typing import Dict
+import sys
+import json
 
 class Parser:
-    def get_log_event(log) -> Dict:
+    def get_log_event(log, farmer_name) -> Dict:
         event = None
-        log_time = log['time'].split('.')[0]
+        log_time = log['time'].split('.')[0] + '.' + log['time'].split('.')[1][0:4]
 
         if constants.KEY_EVENTS[0] in log['log']:
             pattern = r'farm_index=(\d+).*?(\d+\.\d+)% complete.*?sector_index=(\d+)'        
@@ -15,7 +17,7 @@ class Parser:
             if match:
                 event = {
                     'Event Type': 'Plotting Sector',
-                    'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
                     'Data': {
                         'Farm Index': int(match.group(1)),
                         'Percentage Complete': match.group(2),
@@ -29,35 +31,46 @@ class Parser:
             if match:
                 event = {
                     'Event Type': 'Piece Cache Sync',
-                    'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
                     'Data': {
                         'Percentage Complete': float(match.group(1)),
+                        'Farmer Name': farmer_name
                     }
                 }
         elif constants.KEY_EVENTS[2] in log['log']:
             event = {
                     'Event Type': 'Plotting Paused',
-                    'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                    'Data': {
+                        'Farmer Name': farmer_name
+                    }
             }
         elif constants.KEY_EVENTS[3] in log['log']:
             event = {
                 'Event Type': 'Plotting Resumed',
-                'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                'Data': {
+                    'Farmer Name': farmer_name
+                }
             }
         elif constants.KEY_EVENTS[4] in log['log']:
             event = {
                 'Event Type': 'Finished Piece Cache Sync',
-                'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                'Data': {
+                    'Farmer Name': farmer_name
+                }
             }
         elif constants.KEY_EVENTS[5] in log['log']:
-            pattern = r'{farm_index=(\d+)}'
+            pattern = r'farm_index=(\d+).*hash\s(0x[0-9a-fA-F]+)'
             match = re.search(pattern, log['log'])
 
             event = {
                 'Event Type': 'Reward',
-                'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
                 'Data': {
-                    'Farm Index': match.group(1)
+                    'Farm Index': match.group(1),
+                    'Hash': match.group(2)
                 }
             }
         elif constants.KEY_EVENTS[6] in log['log']:
@@ -68,7 +81,7 @@ class Parser:
 
             event = {
                 'Event Type': 'New Farm Identified',
-                'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
                 'Data': {
                     'Farm Index': int(match.group(1))
                 }
@@ -76,7 +89,10 @@ class Parser:
         elif constants.KEY_EVENTS[7] in log['log']:
             event = {
                 'Event Type': 'Synchronizing Piece Cache',
-                'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                'Data': {
+                    'Farmer Name': farmer_name
+                }
             }
         elif constants.KEY_EVENTS[8] in log['log']:
             pattern = r'farm_index=(\d+).*?(\d+\.\d+)% complete.*?sector_index=(\d+)'        
@@ -84,11 +100,11 @@ class Parser:
             if match:
                 event = {
                     'Event Type': 'Replotting Sector',
-                    'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
                     'Data': {
                         'Farm Index': int(match.group(1)),
-                        'Percentage Complete': match.group(2),
-                        'Current Sector': match.group(3)
+                        'Percentage Complete': float(match.group(2)),
+                        'Current Sector': int(match.group(3))
                     }
                 }
         elif constants.KEY_EVENTS[9] in log['log']:
@@ -97,7 +113,7 @@ class Parser:
             if match:
                 event = {
                     'Event Type': 'Replotting Complete',
-                    'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
                     'Data': {
                         'Farm Index': int(match.group(1)),
                     }
@@ -108,16 +124,82 @@ class Parser:
             if match:
                 event = {
                     'Event Type': 'Failed to Send Solution',
-                    'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
                     'Data': {
                         'Farm Index': int(match.group(1)),
+                        'Hash': None
                     }
                 }
-            logger.info(event)
+        elif constants.KEY_EVENTS[11] in log['log']:
+            pattern = r'starting (\d+) workers'
+            match = re.search(pattern, log['log'])
+            if match:
+                event = {
+                    'Event Type': 'Starting Workers',
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                    'Data': {
+                        'Number of Workers': int(match.group(1)),
+                        'Farmer Name': farmer_name
+                    }
+                }
+        elif constants.KEY_EVENTS[12] in log['log']:
+            pattern = r'farm_index=(\d+).*ID:\s+([A-Z0-9]+)'
+            match = re.search(pattern, log['log'])
+            if match:
+                event = {
+                    'Event Type': 'Farm ID',
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                    'Data': {
+                        'Farm Index': int(match.group(1)),
+                        'Farm ID': match.group(2),
+                    }
+                }
+        elif constants.KEY_EVENTS[13] in log['log']:
+            pattern = r'farm_index=(\d+).*Public key:\s+(0x[a-fA-F0-9]+)'
+            match = re.search(pattern, log['log'])
+            if match:
+                event = {
+                    'Event Type': 'Farm Public Key',
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                    'Data': {
+                        'Farm Index': int(match.group(1)),
+                        'Farm Public Key': match.group(2),
+                    }
+                }
+        elif constants.KEY_EVENTS[14] in log['log']:
+            pattern = r'farm_index=(\d+).*Allocated space:\s+([\d.]+)\s+(GiB|TiB|GB|TB)\s+\(([\d.]+)\s+(GiB|TiB|GB|TB)\)'
+            match = re.search(pattern, log['log'])
+
+            if match:
+                if match.group(3) == 'TiB':
+                    allocated_gib = float(match.group(2)) * 1024
+                else:
+                    allocated_gib = float(match.group(2))
+
+                event = {
+                    'Event Type': 'Farm Allocated Space',
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                    'Data': {
+                        'Farm Index': int(match.group(1)),
+                        'Allocated Space Primary': allocated_gib                    
+                    }
+                }
+        elif constants.KEY_EVENTS[15] in log['log']:
+            pattern = r'farm_index=(\d+).*Directory:\s+(.+)'
+            match = re.search(pattern, log['log'])
+            if match:
+                event = {
+                    'Event Type': 'Farm Directory',
+                    'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
+                    'Data': {
+                        'Farm Index': int(match.group(1)),
+                        'Directory': match.group(2)
+                    }
+                }
         else:
             event = {
                 'Event Type': 'Unknown',
-                'Datetime': datetime.datetime.strptime(log_time, "%Y-%m-%dT%H:%M:%S"),
+                'Datetime': datetime.datetime.strptime(log_time, '%Y-%m-%dT%H:%M:%S.%f'),
                 'data': {
                     'log': log['log']
                 }
@@ -167,9 +249,18 @@ class Parser:
                             "Proving Time Seconds Sum": None,
                             "Auditing Time Seconds Sum": None,
                         }
+            
 
             if metric.name == 'subspace_farmer_sectors_total_sectors':
-                parsed_metrics["Farms"][metric.labels["farm_id"]][metric.labels["state"]] = metric.value
+                if metric.labels["state"] == 'Plotted':
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Plotted"] = metric.value
+                elif metric.labels["state"] == 'NotPlotted':
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Not Plotted"] = metric.value
+                elif metric.labels["state"] == 'Expired':
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Expired"] = metric.value
+                elif metric.labels["state"] == 'AboutToExpire':
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["About to Expire"] = metric.value
+
 
             # Downloading Time
             elif metric.name == 'subspace_farmer_sector_downloading_time_seconds_count':
@@ -213,6 +304,7 @@ class Parser:
             elif metric.name == 'subspace_farmer_auditing_time_seconds_sum':
                 parsed_metrics["Farms"][metric.labels["farm_id"]]["Auditing Time Seconds Sum"] = metric.value
 
+            # =============== FARMER METRICS
             # Download
             elif metric.name == 'subspace_farmer_sector_downloading_counter_sectors_total':
                 parsed_metrics["Farmer"]["Downloading Sectors"] = metric.value
@@ -245,21 +337,4 @@ class Parser:
             elif metric.name == 'subspace_established_connections':
                 parsed_metrics["Farmer"]["Established Connections"] = metric.value
 
-        # logger.info(json.dumps(parsed_metrics, indent=4))
-
         return parsed_metrics
-    
-    def get_farm_id(log):
-        pattern = r"ID:\s+(\S+)"
-
-        # Use re.search() to find the match
-        match = re.search(pattern, log['log'])
-
-        return match.group(1)
-    
-    def get_allocated_space(log):
-        pattern = r"Allocated space: ([\d\.]+) (TiB|GiB|TB|GB)"
-        # Use re.search() to find the match
-        match = re.search(pattern, log['log'])
-
-        return match.group(1) + " " + match.group(2)

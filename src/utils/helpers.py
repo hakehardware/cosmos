@@ -3,6 +3,7 @@ import os
 import yaml
 import subprocess
 import json
+import datetime
 
 class Helpers:
     @staticmethod
@@ -83,3 +84,7 @@ class Helpers:
             return True
 
         return False
+    
+    @staticmethod
+    def get_current_datetime():
+        return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
