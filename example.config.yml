@@ -1,4 +1,5 @@
 farmer_name: Whiskey
 farmer_container_name: subspace-farm-stack
 farmer_metrics: http://172.18.0.100:9080/metrics
+database_location: ./
 discord_webhooks_on: True

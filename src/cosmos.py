@@ -36,7 +36,7 @@ class Cosmos:
 
         self.reward_webhook = os.getenv('REWARD_WEBHOOK')
 
-        self.database_api = DatabaseAPI()
+        self.database_api = DatabaseAPI(self.config["database_location"] + 'cosmos.db')
 
     async def _evaluate_log(self, log) -> None:
         event = Parser.get_log_event(log, self.config['farmer_name'])
@@ -309,4 +309,6 @@ class Cosmos:
 
         # Launch Asyncio Loops
         await self.launch()
+
+
 

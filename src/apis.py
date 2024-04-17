@@ -49,13 +49,14 @@ class DiscordAPI:
         loop.close()
 
 class DatabaseAPI:
-    def __init__(self, db_name='cosmos.db'):
-        self.db_name = db_name
+    def __init__(self, db_location):
+        self.db_location = db_location
         self.conn = None
+
 
     def connect(self):
         # logger.info('Connecting to DB')
-        self.conn = sqlite3.connect(self.db_name)
+        self.conn = sqlite3.connect(self.db_location)
 
     def disconnect(self):
         # logger.info('Disconnecting from DB')
