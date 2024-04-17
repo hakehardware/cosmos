@@ -3,11 +3,13 @@ import sys
 from src.utils.helpers import Helpers
 from src.utils.logger import logger
 from src.cosmos import Cosmos
+import asyncio
 
 
 def main():
     # To read the docker logs the user must run the script with sudo
     is_root = Helpers.check_root()
+    
     if not is_root:
         logger.error('To read docker logs you need to run this script with sudo')
         sys.exit(1)
@@ -30,7 +32,7 @@ def main():
 
     # Start Cosmos app
     cosmos = Cosmos(config)
-    cosmos.run()
+    asyncio.run(cosmos.run())
 
 
 if __name__ == "__main__":

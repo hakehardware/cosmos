@@ -41,6 +41,7 @@ class DiscordAPI:
             await webhook.send(embed=embed)
 
     def send_discord_message(url, message):
+
         loop = asyncio.new_event_loop()
         loop.run_until_complete(
             DiscordAPI.send_message(url, message)
@@ -130,7 +131,7 @@ class DatabaseAPI:
                             encoding_time_seconds_cnt INTEGER,
                             downloading_time_seconds_cnt INTEGER,
                             proving_time_seconds_cnt INTEGER,
-                            auditing_time_seconds_count INTEGER,
+                            auditing_time_seconds_cnt INTEGER,
                             plotting_time_seconds_sum REAL,
                             writing_time_seconds_sum REAL,
                             encoding_time_seconds_sum REAL,
@@ -584,7 +585,7 @@ class DatabaseAPI:
 
         return True
 
-    def update_farm_metrics(self, farm_id, farm_metrics):
+    def insert_farm_metrics(self, farm_id, farm_metrics):
         try:
             self.connect()
             cursor = self.conn.cursor()
@@ -592,25 +593,26 @@ class DatabaseAPI:
             current_datetime = Helpers.get_current_datetime()
 
             cursor.execute('''
-                INSERT INTO farms (
-                    farm_id TEXT,
-                    plotted INTEGER,
-                    not_plotted INTEGER,
-                    about_to_expire INTEGER,
-                    plotting_time_seconds_cnt INTEGER,
-                    writing_time_seconds_cnt INTEGER,
-                    encoding_time_seconds_cnt INTEGER,
-                    downloading_time_seconds_cnt INTEGER,
-                    proving_time_seconds_cnt INTEGER,
-                    auditing_time_seconds_cnt INTEGER,
-                    plotting_time_seconds_sum REAL,
-                    writing_time_seconds_sum REAL,
-                    encoding_time_seconds_sum REAL,
-                    downloading_time_seconds_sum REAL,
-                    proving_time_seconds_sum REAL,
-                    auditing_time_seconds_sum REAL,
-                    metrics_datetime TEXT
-                ) VALUES (?, ?)''', (
+                INSERT INTO farm_metrics (
+                    farm_id,
+                    plotted,
+                    not_plotted,
+                    expired,
+                    about_to_expire,
+                    plotting_time_seconds_cnt,
+                    writing_time_seconds_cnt,
+                    encoding_time_seconds_cnt,
+                    downloading_time_seconds_cnt,
+                    proving_time_seconds_cnt,
+                    auditing_time_seconds_cnt,
+                    plotting_time_seconds_sum,
+                    writing_time_seconds_sum,
+                    encoding_time_seconds_sum,
+                    downloading_time_seconds_sum,
+                    proving_time_seconds_sum,
+                    auditing_time_seconds_sum,
+                    metric_datetime
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
                     farm_id,
                     farm_metrics['Plotted'],
                     farm_metrics['Not Plotted'],
@@ -646,8 +648,57 @@ class DatabaseAPI:
 
         return True
 
-    def update_farmer_metrics(self, farm_id, farmer_metrics):
-        pass
+    def update_farmer_metrics(self, farmer_name, farmer_metrics):
+        try:
+            self.connect()
+            cursor = self.conn.cursor()
+
+            current_datetime = Helpers.get_current_datetime()
+
+            cursor.execute('''
+                INSERT INTO farmer_metrics (
+                    farmer_name,
+                    established_connections,
+                    downloading_sectors,
+                    downloaded_sectors,
+                    encoding_sectors,
+                    encoded_sectors,
+                    writing_sectors,
+                    written_sectors,
+                    plotting_sectors,
+                    plotted_sectors,
+                    metric_datetime
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+                    farmer_name,
+                    farmer_metrics['Established Connections'],
+                    farmer_metrics['Downloading Sectors'],
+                    farmer_metrics['Downloaded Sectors'],
+                    farmer_metrics['Encoding Sectors'],
+                    farmer_metrics['Encoded Sectors'],
+                    farmer_metrics['Writing Sectors'],
+                    farmer_metrics['Written Sectors'],
+                    farmer_metrics['Plotting Sectors'],
+                    farmer_metrics['Plotted Sectors'],
+                    current_datetime
+                    )
+                )
+
+
+            # INSERT HERE
+
+            self.conn.commit()
+
+        except Exception as e:
+            # Rollback the transaction if an error occurs
+            logger.error(f'Error: {e}')
+            self.conn.rollback()
+            return False
+        
+        
+        finally:
+            self.disconnect()
+
+        return True
 
     def db_update_template(self) -> bool:
         try:
@@ -669,53 +720,6 @@ class DatabaseAPI:
             self.disconnect()
 
         return True
-
-    # def get_and_update_farm_indexes(self, farm_ids):
-    #     try:
-    #         logger.info('Iterating through farms to get the farm_indexes')
-    #         self.connect()
-    #         cursor = self.conn.cursor()
-
-    #         farm_indexes = {}
-    #         for farm_id in farm_ids:
-    #             # Execute the SELECT statement to retrieve event_data containing the specified farm_id
-    #             cursor.execute("""
-    #                 SELECT event_data 
-    #                 FROM events 
-    #                 WHERE event_data LIKE ? 
-    #                 AND event_datetime = (
-    #                     SELECT MAX(event_datetime) 
-    #                     FROM events 
-    #                     WHERE event_data LIKE ?
-    #                 )""", 
-    #                 ('%' + farm_id + '%', '%' + farm_id + '%'))
-    #             row = cursor.fetchone()
-
-    #             # Parse the event_data as JSON and extract the "Farm Index" value
-    #             if row:
-    #                 event_data_json = json.loads(row[0])
-    #                 farm_index = event_data_json.get("Farm Index")
-    #                 logger.info(f'{farm_id} has an index of {event_data_json.get("Farm Index")}')
-
-    #                 farm_indexes[farm_id] = farm_index
-
-
-    #         for farm_id, farm_index in farm_indexes.items():
-    #             cursor.execute("UPDATE farms SET farm_index = ? WHERE farm_id = ?", (farm_index, farm_id))
-    #             logger.info(f'Updating database for {farm_id} with an index of {farm_index}')
-
-    #         self.conn.commit()
-
-        
-    #     except Exception as e:
-    #         # Rollback the transaction if an error occurs
-    #         logger.error(f'Error: {e}')
-    #         self.conn.rollback()
-    #         return False
-
-    #     finally:
-    #         self.disconnect()
-
     
     def initialize(self):
         self.create_tables()

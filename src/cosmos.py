@@ -8,10 +8,14 @@ import requests
 import os
 import json
 import sys
+import asyncio
+import signal
+from aiofiles import open as async_open
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
 class Cosmos:
     def __init__(self, config) -> None:
         self.config = config
@@ -34,7 +38,76 @@ class Cosmos:
 
         self.database_api = DatabaseAPI()
 
-    def _backfill_logs(self) -> None:
+    async def _evaluate_log(self, log) -> None:
+        event = Parser.get_log_event(log, self.config['farmer_name'])
+
+        # Add Event to Database if it isn't already in there
+        if event['Event Type'] != 'Unknown':
+            new_event = self.database_api.insert_event(event)
+
+            if new_event:
+                if event['Event Type'] == "Farm ID":
+                    # Update Farm ID
+                    self.database_api.update_farm_id(event)
+
+                elif event['Event Type'] == "Farm Public Key":
+                    # Update Farm Public Key                           
+                    self.database_api.update_farm_pub_key(event)
+
+                elif event['Event Type'] == "Farm Allocated Space":
+                    # Update Farm Allocated Space                            
+                    self.database_api.update_farm_alloc_space(event)
+
+                elif event['Event Type'] == 'Farm Directory':
+                    # Update Farm Directory
+                    self.database_api.update_farm_directory(event)
+
+                elif event['Event Type'] == 'Starting Workers':
+                    # Update Farm Workers
+                    self.database_api.update_farm_workers(event)
+
+                elif event['Event Type'] == 'Failed to Send Solution':
+                    # Update Rewards for Failed Result
+                    self.database_api.update_rewards(event)
+
+                elif event['Event Type'] == 'Replotting Complete':
+                    # Update Farm Status
+                    self.database_api.update_farm_status(event)
+
+                elif event['Event Type'] == 'Replotting Sector':
+                    # Update Plots for Replotted Sector
+                    self.database_api.update_plotting(event, 1)
+
+                elif event['Event Type'] == 'Synchronizing Piece Cache':
+                    # Update Farmer Status
+                    self.database_api.update_piece_cache_status(event)
+
+                elif event['Event Type'] == 'Reward':
+                    # Update Rewards for Success Result
+                    self.database_api.update_rewards(event)
+                    await self.send_discord_message('Reward', f'{self.config["farmer_name"]} Received a Reward')
+
+                elif event['Event Type'] == 'Finished Piece Cache Sync':
+                    # Update Farmer Status
+                    self.database_api.update_piece_cache_status(event)
+
+                elif event['Event Type'] == 'Plotting Resumed':
+                    # Update Farm Status
+                    self.database_api.update_farmer_status(event)
+
+                elif event['Event Type'] == 'Plotting Paused':
+                    # Update Farm Status
+                    self.database_api.update_farmer_status(event)
+
+                elif event['Event Type'] == 'Piece Cache Sync':
+                    # Update Farmer Status
+                    self.database_api.update_piece_cache_sync(event)
+
+                elif event['Event Type'] == 'Plotting Sector':
+                    # Update Plots for Plotted Sector
+                    self.database_api.update_plotting(event, 0)
+
+    async def _backfill_logs(self) -> None:
         # Backfill Node Logs
         if self.containers["Node Log Location"]:
             logger.info('Backfilling Node Logs')
@@ -52,75 +125,7 @@ class Cosmos:
             logger.info(f'Farmer Log Count: {len(farmer_logs)}')
 
             for log in farmer_logs:
-                event = Parser.get_log_event(log, self.config['farmer_name'])
-
-                # Add Event to Database if it isn't already in there
-                if event['Event Type'] != 'Unknown':
-                    new_event = self.database_api.insert_event(event)
-
-                    if new_event:
-                        if event['Event Type'] == "Farm ID":
-                            # Update Farm ID
-                            self.database_api.update_farm_id(event)
-
-                        elif event['Event Type'] == "Farm Public Key":
-                            # Update Farm Public Key                           
-                            self.database_api.update_farm_pub_key(event)
-
-                        elif event['Event Type'] == "Farm Allocated Space":
-                            # Update Farm Allocated Space                            
-                            self.database_api.update_farm_alloc_space(event)
-
-                        elif event['Event Type'] == 'Farm Directory':
-                            # Update Farm Directory
-                            self.database_api.update_farm_directory(event)
-
-                        elif event['Event Type'] == 'Starting Workers':
-                            # Update Farm Workers
-                            self.database_api.update_farm_workers(event)
-
-                        elif event['Event Type'] == 'Failed to Send Solution':
-                            # Update Rewards for Failed Result
-                            self.database_api.update_rewards(event)
-
-                        elif event['Event Type'] == 'Replotting Complete':
-                            # Update Farm Status
-                            self.database_api.update_farm_status(event)
-
-                        elif event['Event Type'] == 'Replotting Sector':
-                            # Update Plots for Replotted Sector
-                            self.database_api.update_plotting(event, 1)
-
-                        elif event['Event Type'] == 'Synchronizing Piece Cache':
-                            # Update Farmer Status
-                            self.database_api.update_piece_cache_status(event)
-
-                        elif event['Event Type'] == 'Reward':
-                            # Update Rewards for Success Result
-                            self.database_api.update_rewards(event)
-
-                        elif event['Event Type'] == 'Finished Piece Cache Sync':
-                            # Update Farmer Status
-                            self.database_api.update_piece_cache_status(event)
-
-                        elif event['Event Type'] == 'Plotting Resumed':
-                            # Update Farm Status
-                            self.database_api.update_farmer_status(event)
-
-                        elif event['Event Type'] == 'Plotting Paused':
-                            # Update Farm Status
-                            self.database_api.update_farmer_status(event)
-
-                        elif event['Event Type'] == 'Piece Cache Sync':
-                            # Update Farmer Status
-                            self.database_api.update_piece_cache_sync(event)
-
-                        elif event['Event Type'] == 'Plotting Sector':
-                            # Update Plots for Plotted Sector
-                            self.database_api.update_plotting(event, 0)
-
-                # else:
-                #     logger.info(f'Unknown Event: {event}')
+                await self._evaluate_log(log)
 
     def _set_container_info(self) -> None:
         # Get the Node information if applicable
@@ -174,7 +179,7 @@ class Cosmos:
             if self.containers["Farmer Version"] != constants.VERSIONS["Farmer Version"]:
                 logger.warn(f'You are running {self.containers["Farmer Version"]}. For the best experience use {constants.VERSIONS["Farmer Version"]}')
 
-    def _monitor_metrics(self) -> None:
+    def _monitor_metrics(self):
         try:
             logger.info(f'Getting Farmer Metrics from {self.config["farmer_metrics"]}')
             response = requests.get(f'{self.config["farmer_metrics"]}')
@@ -190,7 +195,11 @@ class Cosmos:
             parsed_metrics = Parser.parse_prometheus_metrics(metrics)
 
             for farm in parsed_metrics['Farms']:
-                logger.info(json.dumps(parsed_metrics['Farms'][farm], indent=4))
+                logger.info(f'Writing metrics for farm {farm} to db')
+                self.database_api.insert_farm_metrics(farm, parsed_metrics['Farms'][farm])
+
+            logger.info(f'Writing metrics for farmer {self.config["farmer_name"]} to db')
+            self.database_api.update_farmer_metrics(self.config["farmer_name"], parsed_metrics['Farmer'])
 
             return parsed_metrics
 
@@ -212,11 +221,68 @@ class Cosmos:
         # Clean out old farms where there is no match in the metrics
         self.database_api.clean_farms(farm_ids)
 
-    def send_discord_message(self, message_type, message) -> None:
+    async def send_discord_message(self, message_type, message) -> None:
         if message_type == 'Reward':
-            DiscordAPI.send_discord_message(self.reward_webhook, message)
+            await DiscordAPI.send_message(self.reward_webhook, message)
 
-    def run(self) -> None:
+    async def _metrics_loop(self):
+        try:
+            while True:
+                self._monitor_metrics()
+                await asyncio.sleep(60)
+                
+        except asyncio.CancelledError:
+            logger.info("Closing Metrics Loop.")
+        except Exception as e:
+            logger.error("Error in fetch_data task:", exc_info=e)
+
+    async def _logs_loop(self):
+        try:
+            with open(self.containers["Farmer Log Location"], "r") as f:
+                f.seek(0, 2)
+                while True:
+                    line = f.readline()
+                    if line:
+                        await self._evaluate_log(json.loads(line.strip()))
+                    else:
+                        await asyncio.sleep(0.1)
+        except FileNotFoundError:
+            print("Log file not found.")
+
+        except asyncio.CancelledError:
+            logger.info("Closing Log Loop.")
+        except Exception as e:
+            logger.error("Error in fetch_data task:", exc_info=e)
+
+    def signal_handler(self):
+        asyncio.create_task(self.shutdown())
+
+    async def shutdown(self):
+        print("Shutting down...")
+        tasks = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+        for task in tasks:
+            task.cancel()
+
+    async def launch(self):
+        # Run loops
+        loop = asyncio.get_running_loop()
+
+        for signame in {'SIGINT', 'SIGTERM'}:
+            loop.add_signal_handler(getattr(signal, signame), self.signal_handler)
+
+        try:
+            log_task = asyncio.create_task(self._logs_loop())
+            metrics_task = asyncio.create_task(self._metrics_loop())
+
+            await asyncio.gather(log_task, metrics_task)
+
+        except Exception as e:
+            logger.error("Error in task:", exc_info=e)
+
+        except asyncio.CancelledError:
+            logger.info("Thanks for using Cosmos, have a great day!")
+
+    async def run(self) -> None:
         logger.info(f'Initializing Cosmos {constants.VERSIONS["Cosmos"]}')
 
         logger.info('Initializing Cosmos DB')
@@ -239,16 +305,8 @@ class Cosmos:
         self._add_farm_ids()
 
         # Backfill Logs
-        self._backfill_logs()
+        await self._backfill_logs()
 
+        # Launch Asyncio Loops
+        await self.launch()
 
-
-        # while True:
-        #     try:
-        #         pass
-
-        #     except:
-        #         pass
-
-        # Pull in Prometheus Metrics
-        parsed_metrics = self._monitor_metrics()

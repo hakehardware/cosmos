@@ -267,42 +267,60 @@ class Parser:
                 parsed_metrics["Farms"][metric.labels["farm_id"]]["Downloading Time Seconds Count"] = metric.value
 
             elif metric.name == 'subspace_farmer_sector_downloading_time_seconds_sum':
-                parsed_metrics["Farms"][metric.labels["farm_id"]]["Downloading Time Seconds Sum"] = metric.value
+                if metric.value is not None:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Downloading Time Seconds Sum"] = round(metric.value, 2)
+                else:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Downloading Time Seconds Sum"] = metric.value = None
 
             # Encoding Time
             elif metric.name == 'subspace_farmer_sector_encoding_time_seconds_count':
                 parsed_metrics["Farms"][metric.labels["farm_id"]]["Encoding Time Seconds Count"] = metric.value
 
             elif metric.name == 'subspace_farmer_sector_encoding_time_seconds_sum':
-                parsed_metrics["Farms"][metric.labels["farm_id"]]["Encoding Time Seconds Sum"] = metric.value
+                if metric.value is not None:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Encoding Time Seconds Sum"] = round(metric.value, 2)
+                else:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Encoding Time Seconds Sum"] = None
 
             # Writing Time
             elif metric.name == 'subspace_farmer_sector_writing_time_seconds_count':
                 parsed_metrics["Farms"][metric.labels["farm_id"]]["Writing Time Seconds Count"] = metric.value
 
             elif metric.name == 'subspace_farmer_sector_writing_time_seconds_sum':
-                parsed_metrics["Farms"][metric.labels["farm_id"]]["Writing Time Seconds Sum"] = metric.value
+                if metric.value is not None:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Writing Time Seconds Sum"] = round(metric.value, 2)
+                else:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Writing Time Seconds Sum"] = None
 
             # Plotting Time
             elif metric.name == 'subspace_farmer_sector_plotting_time_seconds_count':
                 parsed_metrics["Farms"][metric.labels["farm_id"]]["Plotting Time Seconds Count"] = metric.value
 
             elif metric.name == 'subspace_farmer_sector_plotting_time_seconds_sum':
-                parsed_metrics["Farms"][metric.labels["farm_id"]]["Plotting Time Seconds Sum"] = metric.value
+                if metric.value is not None:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Plotting Time Seconds Sum"] = round(metric.value, 2)
+                else:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Plotting Time Seconds Sum"] = None
 
             # Proving Time
             elif metric.name == 'subspace_farmer_proving_time_seconds_count':
                 parsed_metrics["Farms"][metric.labels["farm_id"]]["Proving Time Seconds Count"] = metric.value
 
             elif metric.name == 'subspace_farmer_proving_time_seconds_sum':
-                parsed_metrics["Farms"][metric.labels["farm_id"]]["Proving Time Seconds Sum"] = metric.value
+                if metric.value is not None:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Proving Time Seconds Sum"] = round(metric.value, 2)
+                else:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Proving Time Seconds Sum"] = None
 
             # Auditing Time
             elif metric.name == 'subspace_farmer_auditing_time_seconds_count':
                 parsed_metrics["Farms"][metric.labels["farm_id"]]["Auditing Time Seconds Count"] = metric.value
 
             elif metric.name == 'subspace_farmer_auditing_time_seconds_sum':
-                parsed_metrics["Farms"][metric.labels["farm_id"]]["Auditing Time Seconds Sum"] = metric.value
+                if metric.value is not None:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Auditing Time Seconds Sum"] = round(metric.value, 2)
+                else:
+                    parsed_metrics["Farms"][metric.labels["farm_id"]]["Auditing Time Seconds Sum"] = None
 
             # =============== FARMER METRICS
             # Download
